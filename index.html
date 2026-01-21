@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Wolf Huang | Strategic Governance v35</title>
+    <title>Wolf Huang | Strategic Governance v36</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -58,9 +58,9 @@
         .custom-scroll::-webkit-scrollbar { width: 3px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
         
-        /* 導航島 v35: 抬升幅度調整為 -35% 強化視覺高度 */
+        /* 導航島 v36: 抬升幅度由 -35% 提升至 -60%，確保完全避開底邊工具列 */
         .nav-island {
-            transform: translateY(-35%);
+            transform: translateY(-60%);
             backdrop-filter: blur(15px);
             background: rgba(255, 255, 255, 0.85);
             border: 1px solid rgba(255, 255, 255, 0.15);
@@ -401,7 +401,7 @@
                     <main className="flex-1 flex flex-col bg-[#f8fafc] relative overflow-hidden">
                         <div className="px-4 py-1 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
                             <div className="flex items-center gap-2 text-[6.5px] font-black text-slate-400 uppercase tracking-widest">
-                                <Icon name="shield-check" className="text-blue-600" /> <span>Wolf Huang Interview Guide v35</span>
+                                <Icon name="shield-check" className="text-blue-600" /> <span>Wolf Huang Interview Guide v36</span>
                                 <Icon name="chevron-right" className="text-slate-200" /> <span className="text-blue-600">{slide.title}</span>
                             </div>
                         </div>
@@ -481,7 +481,8 @@
 
                         {shouldShowScript && (
                             <section className="flex-1 bg-[#0f172a] border-t border-slate-800 flex flex-col relative z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] overflow-hidden">
-                                <div className="flex-1 pt-1 pb-4 px-4 md:p-10 lg:px-16 flex flex-col justify-center">
+                                {/* 腳本文字容器 v36: pb-20 強化空間退讓，確保文字往上頂開 */}
+                                <div className="flex-1 pt-1 pb-20 px-4 md:p-10 lg:px-16 flex flex-col justify-center">
                                     {activeScripts.left !== undefined ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-14 max-w-7xl mx-auto w-full">
                                             {['left', 'right'].map(type => (
@@ -522,7 +523,8 @@
                                     )}
                                 </div>
                                 
-                                <div className="px-3 py-2 bg-slate-900/60 backdrop-blur-md flex flex-col items-center gap-1.5 shrink-0 border-t border-slate-800/30 -translate-y-3">
+                                {/* 播放控制座 v36: 顯著抬升 -translate-y-8 (約32px) */}
+                                <div className="px-3 py-2 bg-slate-900/60 backdrop-blur-md flex flex-col items-center gap-1.5 shrink-0 border-t border-slate-800/30 -translate-y-8">
                                     <div className="flex flex-wrap justify-center gap-3">
                                         {slide.scriptLeft !== undefined ? (
                                             ['left', 'right'].map(type => (
@@ -592,7 +594,8 @@
                         )}
                     </main>
 
-                    <footer className="h-9 shrink-0 bg-transparent flex items-start justify-center px-4 relative z-[60]">
+                    {/* 導航島 v36: 抬升幅度強拉至 -60% 徹底閃避系統 UI */}
+                    <footer className="h-10 shrink-0 bg-transparent flex items-start justify-center px-4 relative z-[60]">
                         <div className="nav-island w-full max-w-[250px] h-7.5 rounded-lg flex items-center justify-between px-3 shadow-lg">
                             <button onClick={() => goToSlide(Math.max(0, currentSlide - 1))} disabled={currentSlide === 0}
                                 onTouchStart={(e) => e.stopPropagation()}
