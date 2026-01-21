@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Wolf Huang | Strategic Governance v36</title>
+    <title>Wolf Huang | Strategic Governance v40</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -52,15 +52,14 @@
         }
 
         .responsive-title { font-size: clamp(0.95rem, 2.4vh, 1.8rem); }
-        .responsive-point { font-size: clamp(0.6rem, 1.2vh, 0.85rem); }
+        .responsive-point { font-size: clamp(0.6rem, 1.2vh, 0.85rem); line-height: 1.2; }
         .responsive-script { font-size: clamp(0.7rem, 1.85vh, 2.1vh); line-height: 1.2; }
 
         .custom-scroll::-webkit-scrollbar { width: 3px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
         
-        /* 導航島 v36: 抬升幅度由 -35% 提升至 -60%，確保完全避開底邊工具列 */
         .nav-island {
-            transform: translateY(-60%);
+            transform: translateY(-45%);
             backdrop-filter: blur(15px);
             background: rgba(255, 255, 255, 0.85);
             border: 1px solid rgba(255, 255, 255, 0.15);
@@ -272,7 +271,7 @@
 
             const readList = (label, items) => {
                 if (!items || items.length === 0) return;
-                const text = `Focusing on ${label}. The key points are: ${items.join('. ')}.`;
+                const text = `${label}. ${items.join('. ')}`;
                 speak(text, 'en-US');
             };
 
@@ -311,7 +310,7 @@
                             dictionary[part] ? (
                                 <span key={i} className="glossary-link" onClick={(e) => {
                                     e.stopPropagation(); e.preventDefault(); setActiveTooltip({ term: part, ...dictionary[part] });
-                                }}>{part}</span>
+                                }} onTouchStart={(e) => e.stopPropagation()}>{part}</span>
                             ) : part
                         ))}
                     </span>
@@ -388,7 +387,7 @@
                                     <div className="flex flex-wrap gap-0.5">
                                         {part.slides.map((sIdx, i) => (
                                             <button key={sIdx} onClick={() => goToSlide(sIdx)}
-                                                className={`mega-nav-item px-1 py-0.5 rounded-sm font-bold uppercase transition-all ${currentSlide === sIdx ? 'mega-nav-active' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                                                className={`mega-nav-item px-1 py-0.5 rounded-sm font-bold uppercase transition-all ${currentSlide === sIdx ? 'mega-nav-active' : 'bg-slate-800/40 text-slate-500'}`}
                                                 onTouchStart={(e) => e.stopPropagation()}
                                             > {part.labels[i]} </button>
                                         ))}
@@ -401,7 +400,7 @@
                     <main className="flex-1 flex flex-col bg-[#f8fafc] relative overflow-hidden">
                         <div className="px-4 py-1 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
                             <div className="flex items-center gap-2 text-[6.5px] font-black text-slate-400 uppercase tracking-widest">
-                                <Icon name="shield-check" className="text-blue-600" /> <span>Wolf Huang Interview Guide v36</span>
+                                <Icon name="shield-check" className="text-blue-600" /> <span>Wolf Huang Interview Guide v40</span>
                                 <Icon name="chevron-right" className="text-slate-200" /> <span className="text-blue-600">{slide.title}</span>
                             </div>
                         </div>
@@ -413,7 +412,7 @@
                                         <Icon name="globe" className="text-blue-600 mx-auto" size={18} />
                                         <h2 className="responsive-title font-black text-slate-900 tracking-tighter leading-none">{slide.title}</h2>
                                         <p className="text-[8px] md:text-xs text-blue-600 font-bold uppercase tracking-[0.2em]">{slide.subtitle}</p>
-                                        <div className="flex justify-center gap-2 mt-1.5">
+                                        <div className="flex justify-center gap-2 mt-1.5 mb-2">
                                             {slide.content.map((c, idx) => (
                                                 <span key={idx} className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded text-[7px] font-black">{c}</span>
                                             ))}
@@ -481,8 +480,7 @@
 
                         {shouldShowScript && (
                             <section className="flex-1 bg-[#0f172a] border-t border-slate-800 flex flex-col relative z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] overflow-hidden">
-                                {/* 腳本文字容器 v36: pb-20 強化空間退讓，確保文字往上頂開 */}
-                                <div className="flex-1 pt-1 pb-20 px-4 md:p-10 lg:px-16 flex flex-col justify-center">
+                                <div className="flex-1 pt-1 pb-40 px-4 md:p-10 lg:px-16 flex flex-col justify-center">
                                     {activeScripts.left !== undefined ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-14 max-w-7xl mx-auto w-full">
                                             {['left', 'right'].map(type => (
@@ -523,8 +521,7 @@
                                     )}
                                 </div>
                                 
-                                {/* 播放控制座 v36: 顯著抬升 -translate-y-8 (約32px) */}
-                                <div className="px-3 py-2 bg-slate-900/60 backdrop-blur-md flex flex-col items-center gap-1.5 shrink-0 border-t border-slate-800/30 -translate-y-8">
+                                <div className="px-3 py-2 bg-slate-900/60 backdrop-blur-md flex flex-col items-center gap-1.5 shrink-0 border-t border-slate-800/30 -translate-y-16">
                                     <div className="flex flex-wrap justify-center gap-3">
                                         {slide.scriptLeft !== undefined ? (
                                             ['left', 'right'].map(type => (
@@ -594,7 +591,6 @@
                         )}
                     </main>
 
-                    {/* 導航島 v36: 抬升幅度強拉至 -60% 徹底閃避系統 UI */}
                     <footer className="h-10 shrink-0 bg-transparent flex items-start justify-center px-4 relative z-[60]">
                         <div className="nav-island w-full max-w-[250px] h-7.5 rounded-lg flex items-center justify-between px-3 shadow-lg">
                             <button onClick={() => goToSlide(Math.max(0, currentSlide - 1))} disabled={currentSlide === 0}
