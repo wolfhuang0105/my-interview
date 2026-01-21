@@ -23,54 +23,75 @@
             margin: 0;
             background-color: #f8fafc;
             color: #1e293b;
-            overflow: hidden; /* 強制全螢幕無捲軸 */
+            overflow: hidden; 
             height: 100vh;
         }
 
-        /* 內容進場動畫 */
         .slide-enter { 
-            animation: slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+            animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
         }
         @keyframes slideIn { 
             from { opacity: 0; transform: translateY(4px); } 
             to { opacity: 1; transform: translateY(0); } 
         }
 
-        .nav-link-active {
-            color: #2563eb;
-            font-weight: 900;
-            position: relative;
+        .mega-nav-item {
+            transition: all 0.2s ease;
+            font-size: clamp(7px, 0.7vh, 10px);
         }
-        .nav-link-active::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 10px;
-            height: 2px;
-            background: #2563eb;
-            border-radius: 10px;
+        .mega-nav-active {
+            background: #2563eb !important;
+            color: white !important;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
         }
 
-        .glass-panel {
-            background: rgba(255, 255, 255, 0.98);
+        /* 極致零滾動字體技術 */
+        .responsive-title { font-size: clamp(1rem, 2.4vh, 2.8rem); }
+        .responsive-point { font-size: clamp(0.6rem, 1.25vh, 1rem); }
+        .responsive-script { font-size: clamp(0.8rem, 2.2vh, 2.6vh); }
+
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+        
+        .layout-transition { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        .modal-overlay {
+            background: rgba(15, 23, 42, 0.85);
             backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            z-index: 200;
         }
 
-        /* 樹狀選單進場 */
-        .tree-enter {
-            animation: treeFade 0.25s ease-out forwards;
+        /* 字典關鍵字樣式 */
+        .glossary-link {
+            color: #2563eb;
+            border-bottom: 1.5px dashed rgba(37, 99, 235, 0.5);
+            cursor: pointer;
+            font-weight: 900;
+            padding: 0 1px;
+            transition: all 0.2s ease;
         }
-        @keyframes treeFade {
-            from { opacity: 0; transform: scale(0.99) translateY(-10px); }
-            to { opacity: 1; transform: scale(1) translateY(0); }
+        .glossary-link:hover {
+            background: rgba(37, 99, 235, 0.1);
+            border-bottom-color: #2563eb;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.1);
         }
 
-        /* 隱藏滾動條 */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* Glossary 內部小卡專屬樣式 */
+        .glossary-card {
+            background: white;
+            border: 1px solid #f1f5f9;
+            border-radius: 1.5rem;
+            padding: 1rem;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .glossary-card:hover {
+            border-color: #dbeafe;
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.05);
+            transform: translateY(-2px);
+        }
     </style>
 </head>
 <body>
@@ -79,482 +100,521 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo } = React;
 
-        // 穩定的 Icon 組件
-        const Icon = ({ name, size = 16, className = "" }) => {
+        const Icon = ({ name, size = 12, className = "" }) => {
             const spanRef = useRef(null);
             useEffect(() => {
                 if (window.lucide && spanRef.current) {
                     window.lucide.createIcons();
                 }
             }, [name, size, className]);
-
-            return (
-                <span ref={spanRef} className={`inline-flex shrink-0 items-center justify-center ${className}`} style={{ width: size, height: size }}>
-                    <i data-lucide={name} style={{ width: size, height: size }}></i>
-                </span>
-            );
+            return <span ref={spanRef} className={`inline-flex shrink-0 items-center justify-center ${className}`} style={{ width: size, height: size }}><i data-lucide={name} style={{ width: size, height: size }}></i></span>;
         };
 
         const App = () => {
             const [currentSlide, setCurrentSlide] = useState(0);
             const [isSpeaking, setIsSpeaking] = useState(false);
-            const [isScriptOpen, setIsScriptOpen] = useState(false);
-            const [isTreeOpen, setIsTreeOpen] = useState(false);
+            const [scriptHistory, setScriptHistory] = useState({}); 
+            const [activeVersions, setActiveVersions] = useState({}); 
+            const [editingScript, setEditingScript] = useState(null); 
+            
+            // 字典浮窗狀態
+            const [activeTooltip, setActiveTooltip] = useState(null);
 
-            // 樹狀章節定義
-            const chapters = useMemo(() => [
-                { id: 1, title: "Introduction", start: 2, end: 4, 
-                  subs: [
-                    { label: "Key Skills Summary", idx: 2 },
-                    { label: "Self-Analysis", idx: 3 },
-                    { label: "Operational Approach", idx: 4 }
-                  ] 
+            const touchStart = useRef(0);
+            const touchEnd = useRef(0);
+
+            // 字典定義池 - 核心百科資料
+            const dictionary = useMemo(() => ({
+                "PMP®": { full: "Project Management Professional", def: "The global gold standard of project management certification, emphasizing scalable governance and strategic execution.", mentions: [1, 2, 8] },
+                "PMP": { full: "Project Management Professional", def: "A credential covering Agile, Predictive, and Hybrid project methodologies to drive enterprise value.", mentions: [1, 2, 8] },
+                "ROI": { full: "Return on Investment", def: "A performance measure used to evaluate the efficiency or profitability of an investment in digital tools.", mentions: [1, 8] },
+                "PMO": { full: "Project Management Office", def: "A strategic department that establishes standardization, risk control, and resource optimization for all programs.", mentions: [2, 7] },
+                "DX": { full: "Digital Transformation", def: "The process of using technical innovations to fundamentally reshape business logic and customer experiences.", mentions: [1, 3, 6, 8] },
+                "PLM": { full: "Product Lifecycle Management", def: "Integrating R&D, design, and manufacturing into a unified digital data flow across the product life cycle.", mentions: [1, 3, 5] },
+                "ERP": { full: "Enterprise Resource Planning", def: "Core software used to manage day-to-day business activities such as supply chain, finance, and operations.", mentions: [1, 3, 5] },
+                "MES": { full: "Manufacturing Execution System", def: "Real-time monitoring and control of the production floor, tracking raw materials to finished goods.", mentions: [1, 3, 5] },
+                "CRM": { full: "Customer Relationship Management", def: "A strategic tool for managing lead lifecycles, driving revenue growth, and tracking business opportunities.", mentions: [1, 3, 5] },
+                "FSC": { full: "Financial Supervisory Commission", def: "The top regulator for the financial industry in Taiwan, demanding high standards of system compliance.", mentions: [4] },
+                "NPI": { full: "New Product Introduction", def: "The end-to-end process of transforming a research concept into a mass-produced, market-ready product.", mentions: [5] },
+                "RFQ": { full: "Request for Quotation", def: "The starting point of a business opportunity and the first data node in a digitized sales funnel.", mentions: [5] },
+                "SME": { full: "Small and Medium Enterprise", def: "A dynamic environment requiring flexibility, rapid iteration, and the ability to build systems from 0 to 1.", mentions: [4] },
+                "SA": { full: "Systems Analyst", def: "A bridge professional responsible for deconstructing business processes and designing technical architectures.", mentions: [5] },
+                "InfoSec": { full: "Information Security", def: "The highest priority defense boundary for finance and manufacturing during the digital transformation process.", mentions: [4] },
+                "AI": { full: "Artificial Intelligence", def: "A future engine used to double productivity through automation, predictive analysis, and intelligent scaling.", mentions: [3, 8] },
+                "0 to 1": { full: "Ground-up Infrastructure Build", def: "The pioneering capability to establish sustainable mechanisms and frameworks from scratch in immature environments.", mentions: [3, 8] },
+                "Owner": { full: "Business Owner / Founder Mindset", def: "A perspective that prioritizes execution efficiency and resource allocation over traditional management hierarchy.", mentions: [4, 5] }
+            }), []);
+
+            // 原始內容數據
+            const originalSlides = useMemo(() => [
+                {
+                    id: "cover",
+                    type: "cover",
+                    title: "InterView GuideLine",
+                    subtitle: "Wolf Huang, PMP® | Strategic Governance",
+                    content: ["PMP® Certified", "15 Yrs Exp.", "Digital Transformation"],
+                    script: null
                 },
-                { id: 2, title: "Career Deep-Dive", start: 5, end: 8,
-                  subs: [
-                    { label: "SoftBI (Financial IT)", idx: 5 },
-                    { label: "Manufacturing (GBJM)", idx: 6 },
-                    { label: "Consulting (Bowei)", idx: 7 },
-                    { label: "Philosophy & Dots", idx: 8 }
-                  ]
+                {
+                    id: "skills",
+                    title: "Key Skills Summary",
+                    type: "dual",
+                    left: {
+                        label: "EXPERIENCE SUMMARY",
+                        items: [
+                            "14 years managing cross‑industry projects, DX rollouts, and process improvement across IT, mfg, and finance.",
+                            "Over 7 years leading enterprise IT, PLM and CRM initiatives, as well as PMO and team leadership.",
+                            "6 years building a business, leading delivery and operations as a studio co‑founder."
+                        ]
+                    },
+                    right: {
+                        label: "INDIVIDUAL TRIPLE COMBO",
+                        reason: "Hybrid Competency Architecture",
+                        items: [
+                            "Direct Technical Execution: Building automated digital tools from the ground up with coding capability.",
+                            "Cross-Functional Synergy Leadership: Bridging technical delivery with business strategy through coordination.",
+                            "Global Scalable Governance: Implementing international PMP® frameworks for enterprise-level growth."
+                        ]
+                    },
+                    scriptLeft: "With 14 years of experience across IT, manufacturing, and finance, I've led high-impact digital transformations. My entrepreneurial background adds a unique layer of business resilience.",
+                    scriptRight: "I offer a powerful three-point combo: First, my hands-on technical skill; second, my proven cross-functional leadership; and finally, my PMP framework for scalable governance."
                 },
-                { id: 3, title: "Vision & Strategy", start: 9, end: 10,
-                  subs: [
-                    { label: "Future Outlook", idx: 9 },
-                    { label: "Strategy & Goals", idx: 10 }
-                  ]
+                {
+                    id: "analysis",
+                    title: "Self‑Analysis: Balanced View",
+                    type: "dual",
+                    left: { 
+                        label: "CORE STRENGTHS", 
+                        items: ["Practical Execution (Hands‑on Implementation).", "Scalable PMO Frameworks.", "Remote & Cross‑functional Leadership."] 
+                    },
+                    right: { 
+                        label: "GROWTH AREAS", 
+                        reason: "Global Horizon Expansion", 
+                        details: ["Moving beyond APAC regional focus.", "Western multinational team exposure.", "Scaling proven models globally."] 
+                    },
+                    scriptLeft: "My core strength lies in implementation power. I'm a 'hands‑on' PMO who builds the actual systems needed for success.",
+                    scriptRight: "Regarding my growth areas, I am now actively seeking more exposure to Western multinational environments to scale my professional foundation."
                 },
-                { id: 4, title: "Appendix", start: 11, end: 11,
-                  subs: [
-                    { label: "Glossary & Terms", idx: 11 }
-                  ]
+                {
+                    id: "approach",
+                    title: "Strategy: Start to Scale",
+                    type: "dual",
+                    left: {
+                        label: "HOW I START (0 TO 1)",
+                        items: [
+                            "Infrastructure setup in immature environments.",
+                            "Converting individual knowledge into replicable systems.",
+                            "Small Steps, Fast Pace visualized wins.",
+                            "Holistic alignment of Tech, Systems, and Behavior."
+                        ]
+                    },
+                    right: {
+                        label: "OUTLOOK & DETAILS",
+                        reason: "Intelligent Operational Scaling",
+                        items: [
+                            "AI‑Augmented Scale: AI automation for performance doubling.",
+                            "Ecosystem Integration: Unified data flow via Product LifeCycle.",
+                            "Scalable Governance: Modular mgmt with optimization cycles.",
+                            "Agile Pathfinding: Distilling paths from iterative reactions."
+                        ]
+                    },
+                    scriptLeft: "How do I start? I build from 0 to 1. I focus on turning what people know into systems. Using a 'small steps, fast pace' strategy.",
+                    scriptRight: "Looking ahead, I focus on Intelligent Operational Scaling by integrating AI and unified data flows across the entire ecosystem."
+                },
+                {
+                    id: "softbi_combined",
+                    title: "Career Deep‑Dive: SoftBI",
+                    type: "dual",
+                    left: { label: "RESULT / IMPACT", items: ["Managed 50+ concurrent projects.", "FSC and InfoSec compliance expert.", "High‑end Asset Mgmt (Banking).", "Automated reports: Hours to Minutes."] },
+                    right: { label: "EXIT REASON", reason: "Resource Optimization", details: ["Shoulder-to-shoulder with owner.", "Founder's mindset on resource allocation.", "Mission matured in SME environment."] },
+                    scriptLeft: "At SoftBI, I managed over 50 projects. I handled systems like Asset Management, ensuring everything followed FSC regulations.",
+                    scriptRight: "I worked shoulder-to-shoulder with the owner. As a former founder, I agree that the company should prioritize execution. Mission accomplished."
+                },
+                {
+                    id: "gbjm_combined",
+                    title: "Career Deep‑Dive: GBJM",
+                    type: "dual",
+                    left: { label: "RESULT / IMPACT", items: ["Unified RFQ to Quality data flow.", "Taipei R&D to Dongguan Mfg bridge.", "Standardized complex processing loops.", "Senior SA managing full lifecycle."] },
+                    right: { label: "EXIT REASON", reason: "Family Roots & Banking", details: ["Mission accomplished: vision established.", "Banking family executive background.", "Professional homecoming to Finance."] },
+                    scriptLeft: "At GBJM, I was a Senior SA connecting all data islands from RFQ to quality control. The R&D team recognised my technical depth.",
+                    scriptRight: "Mission accomplished. My mission at GBJM was done. Since both my parents are bank executives, returning to the finance sector felt like homecoming."
+                },
+                {
+                    id: "consulting_combined",
+                    title: "Career Deep‑Dive: Consulting",
+                    type: "dual",
+                    left: { label: "RESULT / IMPACT", items: ["Promoted quickly to Subsidiary Mgr.", "Scaled team 3x during pandemic.", "Built training portal: 2x faster.", "Full DX project lifecycle mastery."] },
+                    right: { label: "EXIT REASON", reason: "Visionary Expansion", details: ["Full mastery: Pre‑sales to Ops.", "Moving Client‑Side for impact.", "Applying expertise to broader scope."] },
+                    scriptLeft: "In Shanghai, I built the team from scratch. I started in customer service and was promoted quickly because I solved problems others couldn't.",
+                    scriptRight: "After years of consulting, I had mastered the full cycle from Pre-sales to customer operations. I reached a stage where I wanted to go 'client-side' to drive real long-term DX results."
+                },
+                {
+                    id: "philosophy",
+                    title: "Philosophy: Connecting the Dots",
+                    type: "dual",
+                    left: {
+                        label: "CAREER PILLARS",
+                        items: [
+                            "International Trade training: Economic logic foundation.",
+                            "Music Industry high‑pressure breakthrough: Survival grit.",
+                            "IT Industry 'from scratch' implementation: Hands‑on power.",
+                            "PMO Strategic Governance: Cross‑domain leadership results."
+                        ]
+                    },
+                    right: {
+                        label: "THE WOLF HYBRID DNA",
+                        reason: "Synergy of Personal Markers",
+                        details: [
+                            "Resilience: Surviving with zero resources.",
+                            "Bilingual: Bridging Business logic and Tech implementation.",
+                            "Actionable: Turning vision into scalable systems.",
+                            "Authentic: These dots connect only to me."
+                        ]
+                    },
+                    scriptLeft: "My journey is defined by four pillars: Trade logic, Music grit, IT implementation, and PMO strategy.",
+                    scriptRight: "Steve Jobs said you only connect dots looking backwards. For me, these are personal markers that create a hybrid DNA."
+                },
+                {
+                    id: "future_outlook",
+                    title: "Future Outlook: Mission & Goals",
+                    type: "dual",
+                    left: {
+                        label: "FUTURE MISSION",
+                        items: [
+                            "Establishing scalable models from 0 to 1 experience.",
+                            "Methodology that empowers focus on core work.",
+                            "Leveraging AI to double organization performance."
+                        ]
+                    },
+                    right: {
+                        label: "GOAL & DETAILS FOLLOW",
+                        items: [
+                            "Status: Final Stage with TSMC‑DX.",
+                            "Status: Interview process with ASUS‑PMO.",
+                            "Status: Interview process with Castles‑DX.",
+                            "Salary Expectation: 1.4M+ NTD.",
+                            "Availability: Ready for Late February 2026."
+                        ]
+                    },
+                    scriptLeft: "My goal is to be a system architect for global processes, establishing scalable models and leveraging AI.",
+                    scriptRight: "I'm ready for late February. I'm in final stages with TSMC, ASUS, and Castles, targeting 1.4M+ based on my strategic ROI."
+                },
+                {
+                    id: "glossary_slide",
+                    title: "Glossary & Dictionary Pool",
+                    type: "glossary_interactive",
+                    categories: [
+                        { label: "GOVERNANCE & VALUE", keys: ["PMP®", "PMO", "ROI", "SA", "Owner"] },
+                        { label: "SYSTEMS & TECHNOLOGY", keys: ["DX", "PLM", "ERP", "MES", "CRM", "InfoSec"] },
+                        { label: "PROCESS & STAGES", keys: ["NPI", "RFQ", "FSC", "SME", "0 to 1", "AI"] }
+                    ],
+                    script: "This interactive glossary serves as a dictionary pool. Every card provides standard pronunciation and citations across this presentation."
                 }
             ], []);
 
-            const currentChapter = chapters.find(c => currentSlide >= c.start && currentSlide <= c.end);
+            const getScriptText = (slideId, type) => {
+                const verIdx = activeVersions[slideId]?.[type];
+                const history = scriptHistory[slideId]?.[type];
+                if (verIdx !== undefined && history && history[verIdx]) return history[verIdx].text;
+                const slide = originalSlides.find(s => s.id === slideId);
+                if (type === 'single') return slide.script;
+                return slide[`script${type.charAt(0).toUpperCase() + type.slice(1)}`];
+            };
 
-            const speak = (text) => {
-                if (isSpeaking) {
-                    window.speechSynthesis.cancel();
-                    setIsSpeaking(false);
-                    return;
-                }
+            const navStructure = [
+                { id: 1, title: "I. INTRO", slides: [1, 2, 3], labels: ["Skills", "Analysis", "Approach"] },
+                { id: 2, title: "II. HISTORY", slides: [4, 5, 6, 7], labels: ["SoftBI", "GBJM", "CONSULT", "Philosophy"] },
+                { id: 3, title: "III. VISION", slides: [8], labels: ["Outlook"] },
+                { id: 4, title: "IV. APPX", slides: [9], labels: ["Glossary"] }
+            ];
+
+            const goToSlide = (idx) => { setCurrentSlide(idx); window.speechSynthesis.cancel(); setIsSpeaking(false); setActiveTooltip(null); };
+            
+            const speak = (text, lang = 'en-US') => {
+                window.speechSynthesis.cancel();
+                if (isSpeaking) { setIsSpeaking(false); return; }
                 const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'en-US';
+                utterance.lang = lang;
                 utterance.rate = 0.95;
                 utterance.onend = () => setIsSpeaking(false);
                 window.speechSynthesis.speak(utterance);
                 setIsSpeaking(true);
             };
 
-            const slides = [
-                {
-                    id: "cover",
-                    type: "cover",
-                    title: "InterView GuideLine",
-                    subtitle: "Wolf Huang, PMP® | Governance & Transformation",
-                    content: ["PMP® Certified", "15 Yrs Exp.", "Digital Transformation"]
-                },
-                {
-                    id: "menu",
-                    type: "menu",
-                    title: "Roadmap Menu",
-                    script: "Welcome to my navigation hub. We'll explore my journey through four strategic phases today."
-                },
-                // PART I
-                {
-                    id: "skills",
-                    title: "Key Skills Summary",
-                    icon: "user",
-                    points: [
-                        "PMP® certified with 15 years experience.",
-                        "One-two punch: PMP theory and technical skills.",
-                        "Automation expert: Cut reporting from 3 hrs to 30 mins.",
-                        "Expert in ERP, PLM, CRM, and MES integration."
-                    ],
-                    script: "Hi, I'm Wolf, a PMP-certified professional. I offer a solid one-two punch: the high-level PMP framework for governance and the hands-on technical skill to build the tools myself. I focus on delivering immediate results through automation and systems integration."
-                },
-                {
-                    id: "analysis",
-                    title: "Self-Analysis",
-                    icon: "trending-up",
-                    type: "cols",
-                    cols: [
-                        { label: "Strengths", items: ["Practical Hands-on execution.", "Scalable PMO Frameworks.", "Remote Leadership."] },
-                        { label: "Growth Area", items: ["Focused on APAC markets.", "Eager for Global Exposure.", "Scaling skills to Global."] }
-                    ],
-                    script: "My strength is my implementation power. I'm a 'hands-on' PMO. My current growth area is expanding my experience with Western multinational teams. I have the professional foundation, and now I'm ready to scale my skills to a global level."
-                },
-                {
-                    id: "howtostart",
-                    title: "Operational Approach",
-                    icon: "zap",
-                    points: [
-                        "0 to 1: Infrastructure in immature environments.",
-                        "Conversion: Individual knowledge to replicable systems.",
-                        "Small Steps: Gaining trust through rapid wins.",
-                        "Holistic: Tech, Systems, and Organizational Behavior."
-                    ],
-                    script: "How do I start? I build from zero to one. I focus on turning what people know into systems. Using a 'small steps, fast pace' strategy, I deliver quick optimizations that build team trust from day one."
-                },
-                // PART II
-                {
-                    id: "softbi",
-                    title: "SoftBI (Financial IT)",
-                    icon: "database",
-                    points: [
-                        "Managed 5 departments and 50+ projects with 20 PMs.",
-                        "Standardized Init, MA, and CR project workflows.",
-                        "FSC and InfoSec compliance for Tier-1 banks.",
-                        "Automated consolidations: Reduced hours to minutes."
-                    ],
-                    script: "At SoftBI, I managed over 50 projects. I coordinated between PDM for roadmaps and PJM for execution. I handled very high-end systems like Asset Management for bank clients, making sure everything followed the latest FSC regulations. I even automated the report consolidation from several hours to just a few minutes. I've finished my mission in the SME environment, and now I'm looking for a global company where I can use these skills on a larger scale."
-                },
-                {
-                    id: "gbjm",
-                    title: "Manufacturing (GBJM)",
-                    icon: "settings",
-                    points: [
-                        "Unified data across CRM, PLM, ERP, and MES.",
-                        "Standardized RFQ -> NPI -> MP lifecycle loops.",
-                        "Managed cross-border SA (Taipei/Dongguan).",
-                        "Recruited by SoftBI while finishing mission."
-                    ],
-                    script: "At GBJM, I was a Senior SA connecting all the data islands from RFQ to quality control. The R&D team even tried to recruit me because I understood their pain points so well. Why did I leave? My mission was done, and SoftBI reached out. Since both my parents are high-level executives in the banking industry, I grew up in that environment. I never expected to have the chance to return to Taiwan and contribute my IT skills back to the finance sector, so it was an opportunity I couldn't miss."
-                },
-                {
-                    id: "consulting",
-                    title: "Consulting (Bowei)",
-                    icon: "award",
-                    points: [
-                        "Promoted quickly from CS to Shanghai Manager.",
-                        "Built training portals to double ramp-up speed.",
-                        "Transitioned to client-side for optimization results.",
-                        "Led teams through lockdown challenges."
-                    ],
-                    script: "In Shanghai, I built the team from scratch. I started in customer service and was promoted quickly because I solved problems others couldn't. I even built a training portal that made new hires productive twice as fast. After years of consulting, I wanted to go 'client-side.' I wanted to stay with a system after it goes live to see the real long-term optimization results, which is why I joined the manufacturing sector later."
-                },
-                {
-                    id: "philosophy",
-                    title: "Connecting the Dots",
-                    icon: "quote",
-                    points: [
-                        "Survival Grit: 6 years running a music studio.",
-                        "Integration: Music, Trade, and IT into unique PMO.",
-                        "Resilience: Business sense sharpened by pressure.",
-                        "Execution: Technical skill to make things happen."
-                    ],
-                    script: "Steve Jobs once said you can only connect the dots looking backwards. For me, those dots are music, trade, and IT. Running a music studio taught me how to survive and solve problems with zero resources. Now, I combine that grit with my tech background to be a PMO who truly understands both the business side and the execution. I have the business sense and the tech skill to make things happen."
-                },
-                // PART III
-                {
-                    id: "outlook",
-                    title: "Future Outlook",
-                    icon: "rocket",
-                    points: [
-                        "Goal: System architect for global processes.",
-                        "Impact: Scalable models for large organizations.",
-                        "Performance: AI automation to double output.",
-                        "Availability: Late February start."
-                    ],
-                    script: "My goal is to be a system architect for global processes. I'm looking for a place with enough resources so I can make a real impact. I can start at the end of February. Right now, I'm in the final stages with TSMC and ASUS, but I'm looking for the team where I can contribute the most. My salary expectation is 1.4M plus, reflecting the immediate ROI I can bring through my PMP skills and automation experience."
-                },
-                {
-                    id: "strategy",
-                    title: "Strategy & Goals",
-                    icon: "globe",
-                    points: [
-                        "Availability: Ready by late February 2026.",
-                        "Status: Navigating final interview stages.",
-                        "Salary: 1.4M+ NTD (Immediate ROI).",
-                        "Fit: Seeking highest contribution potential."
-                    ],
-                    script: "I'm ready to start in late February. I'm currently in the interview stage with other companies, but I'm very interested in the impact I can make here. I'm looking for 1.4 million plus, based on the ROI I bring."
-                },
-                // PART IV
-                {
-                    id: "glossary",
-                    title: "Glossary & Terms",
-                    icon: "shield-check",
-                    type: "glossary",
-                    categories: [
-                        { label: "Role", items: [{term:"PMP", full:"Project Mgmt Prof."}, {term:"ROI", full:"Return on Investment"}] },
-                        { label: "System", items: [{term:"PLM", full:"Product Lifecycle"}, {term:"ERP", full:"Resource Planning"}] },
-                        { label: "Process", items: [{term:"NPI", full:"New Product Intro"}, {term:"FSC", full:"Finance Comm."}] }
-                    ],
-                    script: "Reference list for our technical discussion."
-                }
-            ];
-
-            const slide = slides[currentSlide];
-
-            const goToSlide = (idx) => {
-                setCurrentSlide(idx);
-                setIsTreeOpen(false);
-                window.speechSynthesis.cancel();
-                setIsSpeaking(false);
+            const handleTouchStart = (e) => { touchStart.current = e.targetTouches[0].clientX; };
+            const handleTouchMove = (e) => { touchEnd.current = e.targetTouches[0].clientX; };
+            const handleTouchEnd = () => {
+                const diff = touchStart.current - touchEnd.current;
+                if (diff > 60) goToSlide(Math.min(originalSlides.length - 1, currentSlide + 1));
+                if (diff < -60) goToSlide(Math.max(0, currentSlide - 1));
             };
 
-            return (
-                <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden relative">
+            const setVersion = (slideId, type, idx) => { setActiveVersions(prev => ({ ...prev, [slideId]: { ...(prev[slideId] || {}), [type]: idx } })); };
+            const saveEdit = () => {
+                if (!editingScript) return;
+                const { slideId, type, text } = editingScript;
+                const history = scriptHistory[slideId]?.[type] || [];
+                const newHistory = [...history, { text, timestamp: new Date().toLocaleTimeString() }];
+                setScriptHistory(prev => ({ ...prev, [slideId]: { ...(prev[slideId] || {}), [type]: newHistory } }));
+                setVersion(slideId, type, newHistory.length - 1);
+                setEditingScript(null);
+            };
+            const restoreDefault = (slideId, type) => { setVersion(slideId, type, undefined); setEditingScript(null); };
+
+            const FormattedText = ({ text }) => {
+                if (!text) return null;
+                const keys = Object.keys(dictionary).sort((a, b) => b.length - a.length);
+                const regex = new RegExp(`(\\b(?:${keys.map(k => k.replace(/[®]/g, '®?')).join('|')})\\b)`, 'g');
+                const parts = text.split(regex);
+                return (
+                    <span>
+                        {parts.map((part, i) => (
+                            dictionary[part] ? (
+                                <span key={i} className="glossary-link" onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveTooltip({ term: part, ...dictionary[part] });
+                                }}>{part}</span>
+                            ) : part
+                        ))}
+                    </span>
+                );
+            };
+
+            // 核心組件：渲染一個標準字典卡片（複用於浮窗與列表）
+            const TermCard = ({ term, entry, isModal = false, onClose = null }) => (
+                <div className={`${isModal ? 'bg-white p-6 rounded-[2.5rem] shadow-2xl border border-blue-100 max-w-xs' : 'glossary-card'}`}>
+                    <div className="flex justify-between items-start mb-2">
+                        <div className="px-3 py-1 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest">{term}</div>
+                        {isModal && <button onClick={onClose} className="p-1 hover:bg-slate-50 rounded-full transition-colors"><Icon name="x" size={16} className="text-slate-300"/></button>}
+                    </div>
                     
-                    {/* 樹狀選單彈窗 */}
-                    {isTreeOpen && (
-                        <div className="absolute inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex justify-center items-center p-4">
-                            <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-8 md:p-10 tree-enter border border-slate-100 flex flex-col max-h-[90%] overflow-hidden">
-                                <div className="flex justify-between items-center mb-6 shrink-0">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-blue-600 rounded-lg"><Icon name="layers" className="text-white" /></div>
-                                        <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">System Navigation Tree</h2>
-                                    </div>
-                                    <button onClick={() => setIsTreeOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                                        <Icon name="x" size={20} className="text-slate-400" />
-                                    </button>
+                    {/* 全稱與朗讀 */}
+                    <div className="flex items-center justify-between group mb-2 gap-2">
+                        <h4 className={`${isModal ? 'text-sm' : 'text-[11px]'} font-black text-slate-900 leading-tight`}>{entry.full}</h4>
+                        <button onClick={(e) => { e.stopPropagation(); speak(entry.full, 'en-US'); }} className="shrink-0 p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all shadow-sm">
+                            <Icon name="volume-2" size={isModal ? 12 : 10}/>
+                        </button>
+                    </div>
+
+                    {/* 定義與朗讀 */}
+                    <div className="bg-slate-50/50 p-3 rounded-2xl mb-3 relative group">
+                        <p className={`${isModal ? 'text-[11px]' : 'text-[10px]'} text-slate-500 font-bold italic leading-relaxed pr-6`}>{entry.def}</p>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); speak(entry.def, 'en-US'); }} 
+                            className="absolute top-2 right-2 p-1 bg-white border border-slate-100 text-slate-300 hover:text-blue-600 rounded-md shadow-sm transition-all"
+                        >
+                            <Icon name="play" size={isModal ? 10 : 8}/>
+                        </button>
+                    </div>
+
+                    {/* 跳轉引用區 */}
+                    <div className={`pt-2 border-t border-slate-50`}>
+                        <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Found in Slides:</span>
+                        <div className="flex flex-wrap gap-1.5">
+                            {entry.mentions.map(m => (
+                                <button key={m} onClick={(e) => { e.stopPropagation(); goToSlide(m); }} className="px-2 py-0.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-100 rounded text-[9px] font-black transition-all">#P{m}</button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const slide = originalSlides[currentSlide];
+            const activeScripts = { single: getScriptText(slide.id, 'single'), left: getScriptText(slide.id, 'left'), right: getScriptText(slide.id, 'right') };
+
+            return (
+                <div className="flex flex-col h-screen bg-[#0f172a] overflow-hidden" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onClick={() => setActiveTooltip(null)}>
+                    
+                    {/* 字典浮窗小卡 */}
+                    {activeTooltip && (
+                        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 pointer-events-none">
+                            <div className="pointer-events-auto slide-enter" onClick={(e) => e.stopPropagation()}>
+                                <TermCard term={activeTooltip.term} entry={activeTooltip} isModal={true} onClose={() => setActiveTooltip(null)} />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 編輯版本彈窗 */}
+                    {editingScript && (
+                        <div className="absolute inset-0 modal-overlay flex items-center justify-center p-4 z-[400]">
+                            <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl p-6 flex flex-col gap-4 slide-enter" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-between items-center border-b pb-3">
+                                    <h3 className="font-black text-lg text-slate-800 uppercase flex items-center gap-2"><Icon name="edit-3" size={18} className="text-blue-600" /> Version Control</h3>
+                                    <button onClick={() => setEditingScript(null)} className="p-2"><Icon name="x" size={20} /></button>
                                 </div>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6 overflow-y-auto no-scrollbar pb-6">
-                                    {chapters.map(chap => (
-                                        <div key={chap.id} className="space-y-3">
-                                            <div className="flex items-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-widest border-l-4 border-blue-500 pl-3 bg-blue-50/30 py-1">
-                                                <span>Part {chap.id}. {chap.title}</span>
-                                            </div>
-                                            <div className="pl-4 space-y-1">
-                                                {chap.subs.map(sub => (
-                                                    <button 
-                                                        key={sub.idx} 
-                                                        onClick={() => goToSlide(sub.idx)}
-                                                        className={`w-full text-left py-1.5 px-3 rounded-lg text-xs font-bold transition-all hover:bg-slate-50 ${currentSlide === sub.idx ? 'text-blue-600 bg-blue-50' : 'text-slate-500'}`}
-                                                    >
-                                                        {sub.label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
+                                <textarea className="w-full h-48 p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 italic outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={editingScript.text} onChange={(e) => setEditingScript({...editingScript, text: e.target.value})} />
+                                <div className="flex justify-between items-center">
+                                    <button onClick={() => restoreDefault(editingScript.slideId, editingScript.type)} className="px-4 py-2 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-black border border-rose-100 uppercase tracking-tighter">Restore Default</button>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setEditingScript(null)} className="px-4 py-2 font-bold text-slate-400">Cancel</button>
+                                        <button onClick={saveEdit} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-black shadow-lg">Save Version</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* 頂端瘦身版 Header */}
-                    <header className="glass-panel shrink-0 z-50">
-                        <div className="max-w-[1440px] mx-auto flex items-center justify-between px-6 py-2">
-                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => goToSlide(0)}>
-                                <div className="p-1.5 bg-blue-600 rounded-lg shadow-md">
-                                    <Icon name="shield-check" className="text-white" size={16} />
-                                </div>
-                                <div className="leading-none">
-                                    <h1 className="text-slate-900 text-sm font-black uppercase tracking-tight">InterView Guide</h1>
-                                    <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 sm:block hidden">Wolf Huang, PMP®</p>
-                                </div>
-                            </div>
-
-                            <nav className="hidden lg:flex items-center gap-6 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
-                                <button onClick={() => goToSlide(1)} className={`hover:text-blue-600 transition-colors ${currentSlide === 1 ? 'text-blue-600' : ''}`}>Menu</button>
-                                {chapters.map(c => (
-                                    <button 
-                                        key={c.id} 
-                                        onClick={() => goToSlide(c.start)}
-                                        className={`hover:text-blue-600 transition-all pb-0.5 ${currentChapter?.id === c.id ? 'nav-link-active text-blue-600' : ''}`}
-                                    >
-                                        {c.title}
-                                    </button>
-                                ))}
-                            </nav>
-
-                            <div className="flex items-center gap-2">
-                                <div className="text-[8px] font-mono bg-slate-100 px-2.5 py-0.5 rounded-full text-slate-500 border border-slate-200">
-                                    PG {currentSlide + 1}
-                                </div>
-                            </div>
-                        </div>
-                    </header>
-
-                    {/* 互動式 Breadcrumbs 章節展開 */}
-                    <div className="bg-white border-b border-slate-100 px-6 py-1 shrink-0 flex items-center">
-                        <div className="max-w-[1440px] mx-auto flex items-center gap-2 text-[8px] font-bold uppercase w-full">
-                            <button onClick={() => setIsTreeOpen(true)} className="flex items-center gap-1.5 text-slate-400 hover:text-blue-600 transition-all px-2 py-0.5 rounded hover:bg-slate-100">
-                                <Icon name="layout" size={10} />
-                                <span>System</span>
-                                <Icon name="chevron-down" size={10} className="opacity-40" />
-                            </button>
-                            <Icon name="chevron-right" size={8} className="text-slate-200" />
-                            {currentChapter ? (
-                                <button onClick={() => setIsTreeOpen(true)} className="flex items-center gap-1.5 text-blue-600 hover:bg-blue-50 px-2 py-0.5 rounded transition-all">
-                                    <span>{currentChapter.title}</span>
-                                    <Icon name="chevron-down" size={10} className="opacity-40" />
-                                </button>
-                            ) : (
-                                <span className="text-slate-400 px-2">Navigation</span>
-                            )}
-                            {currentChapter && <Icon name="chevron-right" size={8} className="text-slate-200" />}
-                            {currentChapter && <span className="text-slate-600 px-2">{slide.title}</span>}
-                        </div>
-                    </div>
-
-                    {/* 核心舞台 - 極致零滾動設計 */}
-                    <main className="flex-1 relative flex flex-col items-center justify-center p-4 lg:px-12 overflow-hidden bg-white/30">
-                        
-                        <div className="absolute top-0 right-0 w-[40vw] h-[40vw] bg-blue-50/50 rounded-full blur-[120px] -z-10"></div>
-                        <div className="absolute bottom-0 left-0 w-[30vw] h-[30vw] bg-slate-100/50 rounded-full blur-[100px] -z-10"></div>
-
-                        <div className="w-full max-w-6xl h-full slide-enter flex flex-col justify-center">
-                            
-                            {slide.type === "cover" ? (
-                                <div className="text-center space-y-4 md:space-y-6">
-                                    <div className="inline-block p-3 bg-white rounded-2xl shadow-lg border border-blue-50">
-                                        <Icon name="globe" className="text-blue-600" size={32} />
+                    <nav className="shrink-0 bg-[#0f172a] border-b border-slate-800 p-2 z-50 shadow-2xl">
+                        <div className="max-w-[1440px] mx-auto grid grid-cols-4 gap-2">
+                            {navStructure.map(part => (
+                                <div key={part.id} className="flex flex-col gap-0.5">
+                                    <div className="text-[6px] md:text-[8px] font-black text-slate-500 uppercase tracking-widest px-1 flex items-center gap-1">
+                                        <div className={`w-1 h-1 rounded-full ${part.slides.includes(currentSlide) ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' : 'bg-slate-700'}`}></div> {part.title}
                                     </div>
-                                    <h2 className="text-4xl md:text-7xl lg:text-9xl font-black text-slate-900 tracking-tighter leading-none">{slide.title}</h2>
-                                    <div className="h-1.5 w-32 bg-blue-600 mx-auto rounded-full"></div>
-                                    <p className="text-base md:text-2xl text-blue-600 font-bold uppercase tracking-[0.2em]">{slide.subtitle}</p>
-                                    <div className="flex flex-wrap justify-center gap-2 pt-4">
-                                        {slide.content.map((item, i) => (
-                                            <span key={i} className="px-4 py-1.5 bg-slate-900 text-white rounded-lg text-[8px] font-black tracking-widest">{item}</span>
+                                    <div className="flex flex-wrap gap-1">
+                                        {part.slides.map((sIdx, i) => (
+                                            <button key={sIdx} onClick={() => goToSlide(sIdx)}
+                                                className={`mega-nav-item px-1 py-0.5 md:px-2 md:py-0.5 rounded-sm font-bold uppercase transition-all border border-transparent 
+                                                    ${currentSlide === sIdx ? 'mega-nav-active' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                                            > {part.labels[i]} </button>
                                         ))}
                                     </div>
                                 </div>
-                            ) : slide.type === "menu" ? (
-                                <div className="space-y-4 md:space-y-6 w-full py-2">
-                                    <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-                                        <Icon name="grid" size={24} className="text-blue-600" />
-                                        <h2 className="text-xl md:text-3xl font-black text-slate-900 uppercase tracking-tight">Strategic Roadmap</h2>
+                            ))}
+                        </div>
+                    </nav>
+
+                    <div className="flex-1 flex flex-col bg-[#f8fafc] text-slate-800 min-h-0 relative">
+                        <div className="px-4 py-1 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-2 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                                <Icon name="shield-check" className="text-blue-600" /> <span>Wolf_Interactive_v16.0</span>
+                                <Icon name="chevron-right" className="text-slate-200" /> <span className="text-blue-600">{slide.title}</span>
+                            </div>
+                            <div className="text-[7px] font-black text-slate-300 uppercase italic tracking-widest">Symmetric Knowledge Engine</div>
+                        </div>
+
+                        <section className={`flex flex-col items-center justify-center p-4 md:px-12 bg-white/40 shrink-0 layout-transition overflow-hidden ${(activeScripts.single || activeScripts.left) ? 'h-[35%]' : 'h-full'}`}>
+                            <div className="w-full max-w-6xl slide-enter h-full flex flex-col justify-center">
+                                {slide.type === "cover" ? (
+                                    <div className="text-center space-y-3">
+                                        <Icon name="globe" className="text-blue-600 mx-auto" size={28} />
+                                        <h2 className="responsive-title font-black text-slate-900 tracking-tighter leading-none">{slide.title}</h2>
+                                        <p className="text-xs md:text-lg text-blue-600 font-bold uppercase tracking-[0.4em]">{slide.subtitle}</p>
                                     </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                                        {chapters.map((chap, i) => (
-                                            <div key={i} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-all group">
-                                                <h3 className="text-blue-600 font-black text-[9px] uppercase tracking-[0.2em] mb-2.5 pb-1.5 border-b border-slate-50 flex items-center gap-2">
-                                                    <span className="w-4 h-4 bg-blue-100 text-blue-600 flex items-center justify-center rounded-sm">P{chap.id}</span>
-                                                    {chap.title}
-                                                </h3>
+                                ) : slide.type === "dual" ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 h-full py-1">
+                                        <div className="bg-white/80 p-3 rounded-2xl border border-blue-50 shadow-sm flex flex-col overflow-hidden">
+                                            <h3 className="text-blue-600 font-black text-[9px] mb-1 tracking-widest uppercase flex items-center gap-2"><Icon name="award" size={14} /> {slide.left.label}</h3>
+                                            <div className="flex-1 overflow-hidden flex flex-col">
                                                 <div className="space-y-1">
-                                                    {chap.subs.map((item, j) => (
-                                                        <button 
-                                                            key={j} onClick={() => goToSlide(item.idx)}
-                                                            className="w-full flex items-center justify-between p-2 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-lg transition-all text-left"
-                                                        >
-                                                            <span className="font-bold text-[9px] uppercase truncate">{item.label}</span>
-                                                            <Icon name="chevron-right" size={10} />
-                                                        </button>
-                                                    ))}
+                                                    {(slide.left.items || []).map((it, i) => <div key={i} className="flex items-start gap-2"><div className="mt-1 w-1 h-1 rounded-full bg-blue-400 shrink-0" /><span className="responsive-point font-bold text-slate-700 leading-tight"><FormattedText text={it}/></span></div>)}
                                                 </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : slide.type === "cols" ? (
-                                <div className="space-y-5 md:space-y-7">
-                                    <div className="flex items-center gap-3">
-                                        <Icon name={slide.icon} size={28} className="text-blue-600" />
-                                        <h2 className="text-2xl md:text-5xl font-black text-slate-900 tracking-tight">{slide.title}</h2>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {slide.cols.map((col, i) => (
-                                            <div key={i} className={`p-6 md:p-8 rounded-[1.5rem] border-2 ${i === 0 ? 'bg-emerald-50/50 border-emerald-100' : 'bg-rose-50/50 border-rose-100'}`}>
-                                                <h3 className={`text-base md:text-xl font-black mb-4 flex items-center gap-3 ${i === 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                                                    <Icon name={i === 0 ? "award" : "target"} size={18} /> {col.label}
-                                                </h3>
-                                                <ul className="space-y-2">
-                                                    {col.items.map((item, j) => (
-                                                        <li key={j} className="text-[11px] md:text-sm lg:text-base font-bold text-slate-700 flex gap-2">
-                                                            <Icon name="check-circle" size={14} className="mt-1 opacity-40 shrink-0 text-slate-400" /> {item}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : slide.type === "glossary" ? (
-                                <div className="space-y-6 flex flex-col justify-center">
-                                    <h2 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tight uppercase border-l-8 border-blue-600 pl-4">{slide.title}</h2>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                        {slide.categories.map((cat, i) => (
-                                            <div key={i} className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
-                                                <h3 className="text-blue-600 font-black text-[9px] mb-3 pb-1.5 border-b uppercase tracking-widest">{cat.label}</h3>
-                                                <div className="space-y-2.5">
-                                                    {cat.items.map((item, j) => (
-                                                        <div key={j}>
-                                                            <div className="text-[10px] font-black text-slate-900 leading-none">{item.term}</div>
-                                                            <div className="text-[8px] text-slate-400 font-bold uppercase mt-0.5">{item.full}</div>
+                                        </div>
+                                        <div className="bg-slate-50/50 p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+                                            <h3 className="text-slate-600 font-black text-[9px] mb-1 tracking-widest uppercase flex items-center gap-2"><Icon name="target" size={14} /> {slide.right.label}</h3>
+                                            <div className="flex-1 overflow-hidden flex flex-col">
+                                                {slide.right.reason && <div className="text-blue-700 font-black text-xs md:text-sm mb-1 uppercase leading-none">{slide.right.reason}</div>}
+                                                <div className="space-y-1">
+                                                    {(slide.right.items || slide.right.details || []).map((it, i) => (
+                                                        <div key={i} className="flex items-start gap-2">
+                                                            <div className="mt-1 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                                            <span className="responsive-point font-bold text-slate-800 leading-tight"><FormattedText text={it}/></span>
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
-                                        ))}
+                                        </div>
                                     </div>
-                                </div>
-                            ) : (
-                                <div className="space-y-5 md:space-y-7">
-                                    <div className="flex items-center gap-3">
-                                        <Icon name={slide.icon || "file-text"} size={28} className="text-blue-600" />
-                                        <h2 className="text-2xl md:text-5xl font-black text-slate-900 tracking-tight leading-none">{slide.title}</h2>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 lg:gap-x-12 gap-y-3 md:gap-y-4">
-                                        {slide.points.map((point, i) => (
-                                            <div key={i} className="flex items-start gap-3 p-3 bg-white/60 hover:bg-white rounded-xl border border-transparent hover:border-blue-100 transition-all shadow-sm group">
-                                                <div className="mt-1 w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-600 shrink-0 shadow-md group-hover:scale-125 transition-transform" />
-                                                <span className="text-[10px] md:text-[13px] lg:text-base font-bold text-slate-700 leading-snug tracking-tight">{point}</span>
+                                ) : slide.type === "glossary_interactive" ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full h-full py-1 overflow-hidden">
+                                        {slide.categories.map((cat, i) => (
+                                            <div key={i} className="bg-white/50 p-3 rounded-3xl border border-slate-100 shadow-inner flex flex-col overflow-hidden">
+                                                <h3 className="text-blue-600 font-black text-[9px] mb-3 border-b pb-2 uppercase tracking-widest flex items-center gap-2"><Icon name="book-open" size={12}/> {cat.label}</h3>
+                                                <div className="space-y-3 overflow-y-auto custom-scroll pr-1">
+                                                    {cat.keys.map((key, j) => {
+                                                        const entry = dictionary[key];
+                                                        if (!entry) return null;
+                                                        return (
+                                                            <div key={j} className="slide-enter" style={{ animationDelay: `${j * 0.05}s` }}>
+                                                                <TermCard term={key} entry={entry} isModal={false} />
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
-                                </div>
-                            )}
-
-                            {/* 精簡抽屜式腳本區 */}
-                            {slide.script && (
-                                <div className="mt-5 border-t border-slate-100 pt-3 shrink-0">
-                                    <div className="flex items-center justify-between gap-4 bg-slate-50/50 p-2 rounded-xl">
-                                        <div className="flex items-center gap-3 overflow-hidden flex-1">
-                                            <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-900 text-white rounded text-[8px] font-black uppercase tracking-tighter shrink-0">
-                                                <Icon name="mic" size={8} />
-                                                <span>Script</span>
-                                            </div>
-                                            <p className={`text-[9px] md:text-[10px] italic text-slate-400 font-medium ${!isScriptOpen ? 'truncate' : 'whitespace-normal leading-tight max-h-16 overflow-y-auto no-scrollbar'}`}>
-                                                "{slide.script}"
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <button 
-                                                onClick={() => speak(slide.script)}
-                                                className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-[8px] font-black uppercase shadow-lg transition-all active:scale-95"
-                                            >
-                                                <Icon name={isSpeaking ? "square" : "play"} size={8} />
-                                                <span>Practice</span>
-                                            </button>
-                                            <button onClick={() => setIsScriptOpen(!isScriptOpen)} className="p-1 text-slate-300 hover:text-slate-600 transition-colors">
-                                                <Icon name={isScriptOpen ? "chevron-down" : "chevron-up"} size={12} />
-                                            </button>
+                                ) : (
+                                    <div className="space-y-2 w-full flex flex-col justify-center">
+                                        <div className="flex items-center gap-3"><Icon name={slide.icon || "file-text"} size={20} className="text-blue-600" /><h2 className="responsive-title font-black text-slate-900 leading-none">{slide.title}</h2></div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 pt-1">
+                                            {slide.points?.map((p, i) => <div key={i} className="flex items-start gap-2 p-2 bg-white/60 rounded-xl border border-transparent shadow-sm hover:bg-white transition-all group"><div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" /><span className="responsive-point font-bold text-slate-700 leading-snug"><FormattedText text={p}/></span></div>)}
                                         </div>
                                     </div>
+                                )}
+                            </div>
+                        </section>
+
+                        {(activeScripts.single || activeScripts.left) && (
+                            <section className="flex-1 bg-[#0f172a] flex flex-col shadow-[0_-15px_40px_rgba(0,0,0,0.4)] relative z-10 border-t border-slate-800 overflow-hidden">
+                                <div className="flex-1 overflow-y-auto custom-scroll flex items-start justify-center">
+                                    {activeScripts.left !== undefined ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10 p-6 md:p-8 w-full max-w-7xl h-full">
+                                            {['left', 'right'].map(type => (
+                                                <div key={type} className="space-y-2 flex flex-col h-full overflow-hidden">
+                                                    <div className="flex items-center justify-between border-b border-slate-800 pb-1 shrink-0">
+                                                        <span className={`text-[8px] font-black uppercase tracking-widest ${type === 'left' ? 'text-blue-500' : 'text-emerald-500'}`}>SCRIPT: {type.toUpperCase()}</span>
+                                                        <button onClick={() => setEditingScript({slideId: slide.id, type, text: getScriptText(slide.id, type)})} className="p-1 text-slate-500 hover:text-white transition-colors"><Icon name="edit-3" size={10} /></button>
+                                                    </div>
+                                                    <div className="flex-1 overflow-y-auto custom-scroll no-scrollbar">
+                                                        <p className={`responsive-script italic leading-[1.25] font-black slide-enter opacity-95 ${type === 'left' ? 'text-slate-100' : 'text-slate-200'}`}>"<FormattedText text={getScriptText(slide.id, type)}/>"</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="p-6 md:p-10 w-full max-w-5xl text-center md:text-left flex flex-col items-center h-full overflow-hidden">
+                                            <div className="w-full flex justify-end mb-2"><button onClick={() => setEditingScript({slideId: slide.id, type: 'single', text: getScriptText(slide.id, 'single')})} className="p-1.5 text-slate-500 hover:text-white"><Icon name="edit-3" size={14} /></button></div>
+                                            <div className="flex-1 overflow-y-auto custom-scroll no-scrollbar">
+                                                <p className="responsive-script italic text-slate-100 leading-[1.2] font-black slide-enter opacity-95">"<FormattedText text={getScriptText(slide.id, 'single')}/>"</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    </main>
+                                <div className="px-6 py-2 bg-[#1e293b]/50 border-t border-slate-800 shrink-0 flex flex-col items-center gap-2">
+                                    <div className="flex flex-wrap justify-center gap-4">
+                                        {slide.scriptLeft !== undefined ? (
+                                            <div className="flex gap-8">
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <div className="flex gap-1">
+                                                        <button onClick={() => setVersion(slide.id, 'left', undefined)} className={`px-2 py-0.5 rounded text-[8px] font-black border ${activeVersions[slide.id]?.left === undefined ? 'bg-blue-600 text-white' : 'text-slate-500 border-slate-700'}`}>DEF</button>
+                                                        {(scriptHistory[slide.id]?.left || []).map((_, i) => <button key={i} onClick={() => setVersion(slide.id, 'left', i)} className={`px-2 py-0.5 rounded text-[8px] font-black border ${activeVersions[slide.id]?.left === i ? 'bg-blue-600 text-white' : 'text-slate-500 border-slate-700'}`}>V{i+1}</button>)}
+                                                    </div>
+                                                    <button onClick={() => speak(getScriptText(slide.id, 'left'), 'en-US')} className="px-4 py-1.5 bg-blue-600 text-white rounded-full text-[10px] font-black shadow-lg flex items-center gap-2 active:scale-95"><Icon name={isSpeaking ? "square" : "play"} /> PLAY LEFT</button>
+                                                </div>
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <div className="flex gap-1">
+                                                        <button onClick={() => setVersion(slide.id, 'right', undefined)} className={`px-2 py-0.5 rounded text-[8px] font-black border ${activeVersions[slide.id]?.right === undefined ? 'bg-emerald-600 text-white' : 'text-slate-500 border-slate-700'}`}>DEF</button>
+                                                        {(scriptHistory[slide.id]?.right || []).map((_, i) => <button key={i} onClick={() => setVersion(slide.id, 'right', i)} className={`px-2 py-0.5 rounded text-[8px] font-black border ${activeVersions[slide.id]?.right === i ? 'bg-emerald-600 text-white' : 'text-slate-500 border-slate-700'}`}>V{i+1}</button>)}
+                                                    </div>
+                                                    <button onClick={() => speak(getScriptText(slide.id, 'right'), 'en-US')} className="px-4 py-1.5 bg-emerald-600 text-white rounded-full text-[10px] font-black shadow-lg flex items-center gap-2 active:scale-95"><Icon name={isSpeaking ? "square" : "play"} /> PLAY RIGHT</button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center gap-1.5">
+                                                <div className="flex gap-1.5">
+                                                    <button onClick={() => setVersion(slide.id, 'single', undefined)} className={`px-3 py-0.5 rounded-md text-[9px] font-black border ${activeVersions[slide.id]?.single === undefined ? 'bg-blue-600 text-white' : 'text-slate-500 border-slate-700'}`}>DEFAULT</button>
+                                                    {(scriptHistory[slide.id]?.single || []).map((_, i) => <button key={i} onClick={() => setVersion(slide.id, 'single', i)} className={`px-3 py-0.5 rounded-md text-[9px] font-black border ${activeVersions[slide.id]?.single === i ? 'bg-blue-600 text-white' : 'text-slate-500 border-slate-700'}`}>V{i+1}</button>)}
+                                                </div>
+                                                <button onClick={() => speak(getScriptText(slide.id, 'single'), 'en-US')} className="px-8 py-1.5 bg-blue-600 text-white rounded-full text-[10px] font-black shadow-xl active:scale-95 flex items-center gap-2"><Icon name={isSpeaking ? "square" : "play"} /> START PLAYBACK</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </section>
+                        )}
+                        <button onClick={() => goToSlide(Math.max(0, currentSlide - 1))} className="absolute left-2 top-1/2 -translate-y-1/2 z-40 p-2 rounded-full text-slate-300 opacity-20 hover:opacity-100 hover:bg-blue-600/10 transition-all"><Icon name="chevron-left" size={24} /></button>
+                        <button onClick={() => goToSlide(Math.min(originalSlides.length - 1, currentSlide + 1))} className="absolute right-2 top-1/2 -translate-y-1/2 z-40 p-2 rounded-full text-slate-300 opacity-20 hover:opacity-100 hover:bg-blue-600/10 transition-all"><Icon name="chevron-right" size={24} /></button>
+                    </div>
 
-                    {/* 瘦身版底部導航 */}
-                    <footer className="bg-white px-6 py-2 border-t border-slate-200 flex justify-between items-center shrink-0 z-50">
-                        <button onClick={() => goToSlide(Math.max(0, currentSlide - 1))} disabled={currentSlide === 0}
-                            className="flex items-center gap-1 px-2 py-1 rounded transition-all font-black text-slate-400 hover:text-blue-600 disabled:opacity-0"
-                        >
-                            <Icon name="arrow-left" size={12} />
-                            <span className="text-[8px] tracking-widest uppercase">Prev</span>
-                        </button>
-                        
-                        <div className="hidden sm:flex gap-1">
-                            {slides.map((_, i) => (
-                                <button key={i} onClick={() => goToSlide(i)}
-                                    className={`h-0.5 rounded-full transition-all duration-300 ${i === currentSlide ? 'w-6 bg-blue-600' : 'w-1.5 bg-slate-200'}`}
-                                />
-                            ))}
+                    <footer className="h-8 shrink-0 bg-white border-t border-slate-200 px-6 flex justify-between items-center z-50 shadow-2xl">
+                        <button onClick={() => goToSlide(Math.max(0, currentSlide - 1))} disabled={currentSlide === 0} className="text-slate-300 font-black uppercase text-[8px] hover:text-blue-600 disabled:opacity-0 transition-all tracking-widest">Prev</button>
+                        <div className="flex gap-1">
+                            {originalSlides.map((_, i) => <button key={i} onClick={() => goToSlide(i)} className={`h-1 rounded-full transition-all duration-300 ${i === currentSlide ? 'w-6 bg-blue-600 shadow-md shadow-blue-200' : 'w-1.5 bg-slate-200'}`} />)}
                         </div>
-
-                        <button onClick={() => goToSlide((currentSlide + 1) % slides.length)}
-                            className="flex items-center gap-2 px-6 py-1.5 bg-slate-900 text-white rounded-lg hover:bg-blue-600 transition-all font-black shadow-lg group active:scale-95"
-                        >
-                            <span className="text-[9px] tracking-widest uppercase">{currentSlide === slides.length - 1 ? "Start Over" : "Next"}</span>
-                            <Icon name="arrow-right" size={12} className="group-hover:translate-x-1" />
-                        </button>
+                        <button onClick={() => goToSlide((currentSlide + 1) % originalSlides.length)} className="flex items-center gap-1 px-4 py-1 bg-slate-900 text-white rounded-lg text-[8px] font-black active:scale-95 transition-all shadow-xl">NEXT <Icon name="arrow-right" size={10} /></button>
                     </footer>
                 </div>
             );
