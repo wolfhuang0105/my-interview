@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Wolf Huang | Strategic Governance v24</title>
+    <title>Wolf Huang | Strategic Governance v25</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -51,16 +51,15 @@
             box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
         }
 
-        /* 腳本區微型化 (v24: 再縮小約 10%) */
-        .responsive-title { font-size: clamp(0.95rem, 2.4vh, 1.9rem); }
-        .responsive-point { font-size: clamp(0.6rem, 1.2vh, 0.9rem); }
-        .responsive-script { font-size: clamp(0.72rem, 1.9vh, 2.2vh); line-height: 1.2; }
+        .responsive-title { font-size: clamp(0.95rem, 2.4vh, 1.8rem); }
+        .responsive-point { font-size: clamp(0.6rem, 1.2vh, 0.85rem); }
+        .responsive-script { font-size: clamp(0.7rem, 1.85vh, 2.1vh); line-height: 1.2; }
 
         .custom-scroll::-webkit-scrollbar { width: 3px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
         
         .nav-island {
-            transform: translateY(-2%); /* v24: 再往下壓 */
+            transform: translateY(0%); /* v25: 降至最低 */
             backdrop-filter: blur(15px);
             background: rgba(255, 255, 255, 0.85);
             border: 1px solid rgba(255, 255, 255, 0.15);
@@ -68,14 +67,21 @@
 
         .glossary-link {
             color: #2563eb;
-            border-bottom: 1.5px solid rgba(37, 99, 235, 0.3);
+            border-bottom: 2px solid rgba(37, 99, 235, 0.4);
             cursor: pointer;
-            font-weight: 800;
-            padding: 0 1px;
+            font-weight: 900;
+            padding: 1px 2px;
             margin: 0 1px;
             display: inline-block;
             transition: all 0.2s ease;
             border-radius: 4px;
+            /* 擴大熱區 */
+            position: relative;
+            z-index: 20;
+        }
+        .glossary-link:active {
+            background: rgba(37, 99, 235, 0.2);
+            transform: scale(0.92);
         }
 
         .glossary-card {
@@ -116,8 +122,8 @@
             const [editingScript, setEditingScript] = useState(null); 
             const [activeTooltip, setActiveTooltip] = useState(null);
 
-            const touchStart = useRef(0);
-            const touchEnd = useRef(0);
+            const touchStartPos = useRef({ x: 0, y: 0 });
+            const touchEndPos = useRef({ x: 0, y: 0 });
 
             const dictionary = useMemo(() => ({
                 "PMP®": { full: "Project Management Professional", def: "The global gold standard of project management certification, emphasizing scalable governance and strategic execution.", mentions: [1, 2, 8] },
@@ -174,13 +180,27 @@
                 setIsSpeaking(true);
             };
 
-            const handleTouchStart = (e) => { touchStart.current = e.targetTouches[0].clientX; };
-            const handleTouchMove = (e) => { touchEnd.current = e.targetTouches[0].clientX; };
+            const handleTouchStart = (e) => { 
+                touchStartPos.current = { x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY }; 
+            };
+            const handleTouchMove = (e) => { 
+                touchEndPos.current = { x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY }; 
+            };
             const handleTouchEnd = () => {
                 if (activeTooltip || editingScript) return; 
-                const diff = touchStart.current - touchEnd.current;
-                if (diff > 80) goToSlide(Math.min(originalSlides.length - 1, currentSlide + 1));
-                if (diff < -80) goToSlide(Math.max(0, currentSlide - 1));
+                
+                const deltaX = touchStartPos.current.x - touchEndPos.current.x;
+                const deltaY = touchStartPos.current.y - touchEndPos.current.y;
+                
+                // v25 關鍵防誤觸判定：只有當水平移動大於 60px 且垂直移動較小時才觸發翻頁
+                if (Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                    if (deltaX > 0) goToSlide(Math.min(originalSlides.length - 1, currentSlide + 1));
+                    else goToSlide(Math.max(0, currentSlide - 1));
+                }
+                
+                // 重置座標
+                touchStartPos.current = { x: 0, y: 0 };
+                touchEndPos.current = { x: 0, y: 0 };
             };
 
             const setVersion = (slideId, type, idx) => { setActiveVersions(prev => ({ ...prev, [slideId]: { ...(prev[slideId] || {}), [type]: idx } })); };
@@ -193,11 +213,6 @@
                 setScriptHistory(prev => ({ ...prev, [slideId]: { ...(prev[slideId] || {}), [type]: newHistory } }));
                 setVersion(slideId, type, newHistory.length - 1);
                 setEditingScript(null);
-            };
-
-            const restoreDefault = (slideId, type) => { 
-                setVersion(slideId, type, undefined); 
-                setEditingScript(null); 
             };
 
             const FormattedText = ({ text }) => {
@@ -279,13 +294,13 @@
                         </div>
                     )}
 
-                    {/* 頂部導覽 - v24: 下移至 2.5vh 確保安全距離 */}
-                    <nav className="shrink-0 bg-[#0f172a] border-b border-slate-800 p-2 z-50 shadow-xl mt-[2.5vh]">
+                    {/* 頂部導覽 - v25: 下移至 4.5vh 確保安全距離，完全讓出頂部空間 */}
+                    <nav className="shrink-0 bg-[#0f172a] border-b border-slate-800 p-2 z-50 shadow-xl mt-[4.5vh]">
                         <div className="max-w-6xl mx-auto grid grid-cols-4 gap-1">
                             {navStructure.map(part => (
                                 <div key={part.id} className="flex flex-col gap-0.5">
                                     <div className="text-[6px] font-black text-slate-500 uppercase tracking-widest px-1 flex items-center gap-1">
-                                        <div className={`w-0.5 h-0.5 rounded-full ${part.slides.includes(currentSlide) ? 'bg-blue-500' : 'bg-slate-700'}`}></div> {part.title}
+                                        <div className={`w-0.5 h-0.5 rounded-full ${part.slides.includes(currentSlide) ? 'bg-blue-500 shadow-[0_0_8px_#3b82f6]' : 'bg-slate-700'}`}></div> {part.title}
                                     </div>
                                     <div className="flex flex-wrap gap-0.5">
                                         {part.slides.map((sIdx, i) => (
@@ -302,12 +317,12 @@
                     <main className="flex-1 flex flex-col bg-[#f8fafc] relative overflow-hidden">
                         <div className="px-4 py-1 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
                             <div className="flex items-center gap-2 text-[6.5px] font-black text-slate-400 uppercase tracking-widest">
-                                <Icon name="shield-check" className="text-blue-600" /> <span>v24_Final_Fit</span>
+                                <Icon name="shield-check" className="text-blue-600" /> <span>v25_Safe_Layout_Interactive_Fix</span>
                                 <Icon name="chevron-right" className="text-slate-200" /> <span className="text-blue-600">{slide.title}</span>
                             </div>
                         </div>
 
-                        {/* 主視覺區 */}
+                        {/* 主視覺區 - 保持穩定比例 */}
                         <section className={`flex flex-col items-center justify-center p-2.5 md:px-12 bg-white/40 layout-transition overflow-hidden ${shouldShowScript ? 'h-[32%]' : 'h-full'}`}>
                             <div className="w-full max-w-5xl slide-enter h-full flex flex-col justify-center">
                                 {slide.type === "cover" ? (
@@ -347,14 +362,14 @@
                             </div>
                         </section>
 
-                        {/* 腳本區 - v24: 內距 p-4, 文字再縮小 10% */}
+                        {/* 腳本區 - v25: 減少頂部 Padding (pt-2)，優化空間權益 */}
                         {shouldShowScript && (
                             <section className="flex-1 bg-[#0f172a] border-t border-slate-800 flex flex-col relative z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] overflow-hidden">
-                                <div className="flex-1 p-4 md:p-10 lg:px-16 flex flex-col justify-center">
+                                <div className="flex-1 pt-2 pb-4 px-4 md:p-10 lg:px-16 flex flex-col justify-center">
                                     {activeScripts.left !== undefined ? (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-14 max-w-7xl mx-auto w-full">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-14 max-w-7xl mx-auto w-full">
                                             {['left', 'right'].map(type => (
-                                                <div key={type} className="space-y-1.5">
+                                                <div key={type} className="space-y-1">
                                                     <div className="flex items-center justify-between border-b border-slate-800 pb-1">
                                                         <span className={`text-[7px] font-black uppercase tracking-widest ${type === 'left' ? 'text-blue-500' : 'text-emerald-500'}`}>SPEECH: {type.toUpperCase()}</span>
                                                         <button onClick={(e) => { e.stopPropagation(); setEditingScript({slideId: slide.id, type, text: getScriptText(slide.id, type)}); }} className="text-slate-500 hover:text-white"><Icon name="edit-3" size={8}/></button>
@@ -379,17 +394,17 @@
                                     )}
                                 </div>
                                 
-                                {/* 播放控制座 - v24: 內距縮減 */}
-                                <div className="px-3 py-2.5 bg-slate-900/60 backdrop-blur-md flex flex-col items-center gap-1.5 shrink-0 border-t border-slate-800/30">
-                                    <div className="flex flex-wrap justify-center gap-4">
+                                {/* 播放控制座 */}
+                                <div className="px-3 py-2 bg-slate-900/60 backdrop-blur-md flex flex-col items-center gap-1.5 shrink-0 border-t border-slate-800/30">
+                                    <div className="flex flex-wrap justify-center gap-3">
                                         {slide.scriptLeft !== undefined ? (
                                             ['left', 'right'].map(type => (
-                                                <div key={type} className="flex flex-col items-center gap-1">
+                                                <div key={type} className="flex flex-col items-center gap-0.5">
                                                     <div className="flex gap-1">
                                                         <button onClick={(e) => { e.stopPropagation(); setVersion(slide.id, type, undefined); }} className={`px-1.5 py-0.5 rounded text-[6.5px] font-black border ${activeVersions[slide.id]?.[type] === undefined ? 'bg-blue-600 text-white border-blue-600' : 'text-slate-500 border-slate-700'}`}>DEF</button>
                                                         {(scriptHistory[slide.id]?.[type] || []).map((_, i) => <button key={i} onClick={(e) => { e.stopPropagation(); setVersion(slide.id, type, i); }} className={`px-1.5 py-0.5 rounded text-[6.5px] font-black border ${activeVersions[slide.id]?.[type] === i ? 'bg-blue-600 text-white border-blue-600' : 'text-slate-500 border-slate-700'}`}>V{i+1}</button>)}
                                                     </div>
-                                                    <button onClick={(e) => { e.stopPropagation(); speak(getScriptText(slide.id, type), 'en-US'); }} className={`px-4 py-1.5 rounded-full text-[8.5px] font-black shadow-lg flex items-center gap-1.5 active:scale-95 ${type === 'left' ? 'bg-blue-600' : 'bg-emerald-600'} text-white`}><Icon name={isSpeaking ? "square" : "play"} size={10}/> PLAY {type.toUpperCase()}</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); speak(getScriptText(slide.id, type), 'en-US'); }} className={`px-4 py-1 rounded-full text-[8.5px] font-black shadow-lg flex items-center gap-1.5 active:scale-95 ${type === 'left' ? 'bg-blue-600' : 'bg-emerald-600'} text-white`}><Icon name={isSpeaking ? "square" : "play"} size={10}/> PLAY {type.toUpperCase()}</button>
                                                 </div>
                                             ))
                                         ) : (
@@ -398,19 +413,19 @@
                                                     <button onClick={(e) => { e.stopPropagation(); setVersion(slide.id, 'single', undefined); }} className={`px-2 py-0.5 rounded-md text-[7px] font-black border ${activeVersions[slide.id]?.single === undefined ? 'bg-blue-600 text-white border-blue-600' : 'text-slate-500 border-slate-700'}`}>DEFAULT</button>
                                                     {(scriptHistory[slide.id]?.single || []).map((_, i) => <button key={i} onClick={(e) => { e.stopPropagation(); setVersion(slide.id, 'single', i); }} className={`px-2 py-0.5 rounded-md text-[7px] font-black border ${activeVersions[slide.id]?.single === i ? 'bg-blue-600 text-white border-blue-600' : 'text-slate-500 border-slate-700'}`}>VER {i+1}</button>)}
                                                 </div>
-                                                <button onClick={(e) => { e.stopPropagation(); speak(getScriptText(slide.id, 'single'), 'en-US'); }} className="px-8 py-2 bg-blue-600 text-white rounded-full text-[9px] font-black shadow-xl active:scale-95 flex items-center gap-2"><Icon name={isSpeaking ? "square" : "play"} size={12}/> START PLAYBACK</button>
+                                                <button onClick={(e) => { e.stopPropagation(); speak(getScriptText(slide.id, 'single'), 'en-US'); }} className="px-8 py-1.5 bg-blue-600 text-white rounded-full text-[9px] font-black shadow-xl active:scale-95 flex items-center gap-2"><Icon name={isSpeaking ? "square" : "play"} size={12}/> START PLAYBACK</button>
                                             </div>
                                         )}
                                     </div>
                                 </div>
-                                <div className="h-1 bg-slate-900 shrink-0"></div>
+                                <div className="h-0.5 bg-slate-900 shrink-0"></div>
                             </section>
                         )}
                     </main>
 
-                    {/* 導航島 v24: 高度縮減為 h-10, 自然下沉 */}
-                    <footer className="h-10 shrink-0 bg-transparent flex items-start justify-center px-4 relative z-[60]">
-                        <div className="nav-island w-full max-w-[260px] h-8 mt-0.5 rounded-lg flex items-center justify-between px-3 shadow-lg">
+                    {/* 導航島 v25: 置底對齊，移除額外抬升，騰出安全感 */}
+                    <footer className="h-9 shrink-0 bg-transparent flex items-start justify-center px-4 relative z-[60]">
+                        <div className="nav-island w-full max-w-[250px] h-7.5 rounded-lg flex items-center justify-between px-3 shadow-lg">
                             <button onClick={() => goToSlide(Math.max(0, currentSlide - 1))} disabled={currentSlide === 0}
                                 className="flex items-center gap-1 px-1 py-1 text-slate-400 disabled:opacity-0 font-black uppercase text-[6.5px] tracking-widest active:scale-90"
                             >
@@ -420,7 +435,7 @@
                                 {originalSlides.map((_, i) => <button key={i} onClick={() => goToSlide(i)} className={`h-0.5 rounded-full transition-all duration-300 ${i === currentSlide ? 'w-3 bg-blue-600' : 'w-1 bg-slate-300'}`} />)}
                             </div>
                             <button onClick={() => goToSlide((currentSlide + 1) % originalSlides.length)} 
-                                className="flex items-center gap-1 px-2.5 py-1 bg-slate-900 text-white rounded-md text-[6.5px] font-black active:scale-90 shadow-md"
+                                className="flex items-center gap-1 px-2 py-1 bg-slate-900 text-white rounded-md text-[6.5px] font-black active:scale-90 shadow-md"
                             >
                                 NEXT <Icon name="arrow-right" size={8} />
                             </button>
